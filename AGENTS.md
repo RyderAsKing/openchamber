@@ -112,3 +112,27 @@ Before creating or updating a pull request, read `CONTRIBUTING.md` and
 current evidence for the final PR HEAD; do not make the reviewer reconstruct
 intent, affected surfaces, applicable guidance, validation, visual behavior,
 or failure and rollback considerations from the diff alone.
+
+## Cursor Cloud specific instructions
+
+The startup update script already runs `bun install --frozen-lockfile`. Bun
+(pinned to `bun@1.3.14`) lives at `~/.bun/bin` and is on `PATH` via `~/.bashrc`;
+the OpenCode CLI is installed globally there too (`bun add -g opencode-ai`).
+Standard scripts are in the root `package.json` and `CONTRIBUTING.md`; the notes
+below are only non-obvious caveats.
+
+- Run the web product with `bun run dev` (root). Open the Vite HMR UI at
+  `http://127.0.0.1:5180` — NOT the API at `http://127.0.0.1:3902` (the API port
+  has no HMR and does not serve the dev UI). Health check: `/health` on the API.
+- The web server auto-spawns a managed OpenCode server from the `opencode`
+  binary on `PATH` (never as a bundled sidecar in dev); confirm readiness via
+  `isOpenCodeReady` / `openCodeRunning` in `/health`. If `opencode` is missing
+  from `PATH`, sessions cannot start.
+- No model-provider API keys are configured, but OpenChamber connects to
+  OpenCode Zen free models out of the box (e.g. "Big Pickle"), so real chat/agent
+  responses work for end-to-end testing without adding credentials.
+- `packages/web` Vitest tests: the git service suite
+  (`server/lib/git/service.test.js`) spawns many real `git` processes and is slow
+  in this sandbox, so a few tests time out at the default 5s. Run the web tests
+  with a raised timeout, e.g. `bun run --cwd packages/web test --testTimeout=30000`
+  (all 880 pass); running that file or a single describe in isolation also passes.
