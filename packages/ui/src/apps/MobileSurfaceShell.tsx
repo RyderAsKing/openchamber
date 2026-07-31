@@ -17,6 +17,12 @@ const ENTER_OFFSET_PX = 48;
 // Extra gap above the sheet (below the top safe area) so it doesn't sit flush
 // against the very top of the app.
 const TOP_GAP_PX = 8;
+const PARTIAL_HEIGHT_RATIO = 0.7;
+const EXPAND_DRAG_THRESHOLD_PX = 24;
+const DETENT_TRANSITION_MS = 280;
+
+const sheetHeightExpr = (ratio: number): string =>
+  `calc((100% - var(--oc-safe-area-top, 0px) - ${TOP_GAP_PX}px) * ${ratio})`;
 
 const ensureSurfaceRoot = (): HTMLElement | null => {
   if (typeof document === 'undefined') return null;
@@ -43,6 +49,8 @@ export type MobileSurfaceShellProps = {
   disableEscapeDismiss?: boolean;
   /** If true, render only the drag handle and let the child render its own header. */
   headerless?: boolean;
+  /** 'partial' opens at ~70% height and expands on interaction; 'full' uses the legacy full-height sheet. */
+  detent?: 'partial' | 'full';
   ariaLabel?: string;
   children: React.ReactNode;
 };
@@ -57,6 +65,7 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
   disableSwipeDismiss = false,
   disableEscapeDismiss = false,
   headerless = false,
+  detent = 'partial',
   ariaLabel,
   children,
 }) => {
@@ -64,11 +73,13 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
   const rootRef = React.useRef<HTMLElement | null>(null);
   const [mounted, setMounted] = React.useState(false);
   const [entered, setEntered] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
   const [contentReady, setContentReady] = React.useState(false);
   const [dragOffset, setDragOffset] = React.useState(0);
   const dragStartYRef = React.useRef<number | null>(null);
   const isDraggingRef = React.useRef(false);
   const surfaceRef = React.useRef<HTMLElement | null>(null);
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
   const previousFocusRef = React.useRef<HTMLElement | null>(null);
   // Keep onClose in a ref so the focus/keydown effect below depends only on `open`.
   // The parent passes a fresh inline onClose on every render; if the effect depended
@@ -91,9 +102,37 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
       return () => window.clearTimeout(id);
     }
     setEntered(false);
+    setExpanded(false);
     const id = window.setTimeout(() => setMounted(false), 300);
     return () => window.clearTimeout(id);
   }, [open]);
+
+  const expandIfNeeded = React.useCallback(() => {
+    if (detent === 'partial') {
+      setExpanded(true);
+    }
+  }, [detent]);
+
+  React.useEffect(() => {
+    if (!contentReady || !open || detent !== 'partial' || expanded) return;
+    const root = contentRef.current;
+    if (!root) return;
+
+    const onScroll = () => expandIfNeeded();
+    const scrollables: HTMLElement[] = [];
+    const visit = (node: HTMLElement) => {
+      const style = window.getComputedStyle(node);
+      if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+        scrollables.push(node);
+      }
+      for (const child of Array.from(node.children)) {
+        if (child instanceof HTMLElement) visit(child);
+      }
+    };
+    visit(root);
+    scrollables.forEach((node) => node.addEventListener('scroll', onScroll, { passive: true }));
+    return () => scrollables.forEach((node) => node.removeEventListener('scroll', onScroll));
+  }, [contentReady, detent, expandIfNeeded, expanded, open]);
 
   // Defer mounting heavy children until the enter slide finishes, so the
   // animation stays smooth instead of competing with a large content render.
@@ -169,6 +208,13 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
     if (!isDraggingRef.current || dragStartYRef.current == null) return;
     const currentY = event.touches[0]?.clientY ?? dragStartYRef.current;
     const delta = currentY - dragStartYRef.current;
+    if (detent === 'partial' && !expanded && delta < -EXPAND_DRAG_THRESHOLD_PX) {
+      isDraggingRef.current = false;
+      dragStartYRef.current = null;
+      setExpanded(true);
+      setDragOffset(0);
+      return;
+    }
     setDragOffset(delta > 0 ? delta : 0);
   };
 
@@ -217,6 +263,16 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
       ? `translateY(${dragOffset}px)`
       : 'none';
 
+  const usesPartialDetent = detent === 'partial';
+  const sheetHeight = usesPartialDetent && !expanded
+    ? sheetHeightExpr(PARTIAL_HEIGHT_RATIO)
+    : sheetHeightExpr(1);
+  const sheetTransition = dragOffset !== 0
+    ? 'none'
+    : usesPartialDetent
+      ? `height ${DETENT_TRANSITION_MS}ms cubic-bezier(0.32, 0.72, 0, 1), transform ${ENTER_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`
+      : `transform ${ENTER_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
+
   return createPortal(
     <div
       className={cn(
@@ -246,13 +302,9 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
           }
         }}
         style={{
-          // Sized to leave the top safe area (plus a small gap) uncovered so the
-          // scrim dims it and the sheet sits a few px below the very top.
-          height: `calc(100% - var(--oc-safe-area-top, 0px) - ${TOP_GAP_PX}px)`,
+          height: sheetHeight,
           transform: visualTransform,
-          transition: isDraggingRef.current
-            ? 'none'
-            : `transform ${ENTER_DURATION_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+          transition: sheetTransition,
         }}
       >
         <div
@@ -292,7 +344,13 @@ export const MobileSurfaceShell: React.FC<MobileSurfaceShellProps> = ({
             </header>
           ) : null}
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={contentRef}
+          className="min-h-0 flex-1 overflow-hidden"
+          onTouchStart={expandIfNeeded}
+          onFocusCapture={expandIfNeeded}
+          onWheel={expandIfNeeded}
+        >
           {contentReady ? (
             <div className="h-full" style={{ animation: 'oc-surface-content-in 200ms ease-out' }}>
               {children}

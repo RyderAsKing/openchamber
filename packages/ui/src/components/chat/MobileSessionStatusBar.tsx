@@ -577,7 +577,6 @@ const MobileSessionStatusOpenPanel: React.FC<MobileSessionStatusBarProps> = ({
       onClose={() => setOpen(false)}
       title={t('mobile.sessions.search.section.sessions')}
       renderHeader={renderHeader}
-      className="h-[72vh]"
       contentMaxHeightClassName="max-h-full"
     >
       <div className="flex min-h-full flex-col gap-0.5">

@@ -8,11 +8,12 @@ import { useSessionUIStore } from '@/sync/session-ui-store';
 
 /**
  * Native-feeling edge swipe to switch sessions in the mobile chat: start a horizontal swipe
- * from the very left/right edge and drag toward the centre to step through sessions.
+ * from the very right edge and drag toward the centre to step to the next session.
  *
- * - Left edge → centre  = previous session (the more-recent one in the list)
- * - Right edge → centre = next session (the older one)
+ * - Right edge → centre = next session (the older one in the list)
  *
+ * Opening the sessions drawer from the left edge is handled separately by
+ * `useSwipeOpenSessionsDrawer`.
  * Navigation walks the same ranked list the rest of the mobile UI uses: top-level sessions
  * (no subtasks) across all projects, lifecycle-ranked with timestamp fallback. The order is computed at
  * gesture time from the store (not subscribed) so it's always fresh and never re-attaches.
@@ -79,7 +80,6 @@ export const useEdgeSwipeSessionSwitch = (
     if (!element) return;
 
     let tracking = false;
-    let fromLeftEdge = false;
     let startX = 0;
     let startY = 0;
 
@@ -90,10 +90,8 @@ export const useEdgeSwipeSessionSwitch = (
       }
       const touch = event.touches[0];
       const width = element.clientWidth;
-      const nearLeft = touch.clientX <= EDGE_ZONE;
       const nearRight = touch.clientX >= width - EDGE_ZONE;
-      tracking = nearLeft || nearRight;
-      fromLeftEdge = nearLeft;
+      tracking = nearRight;
       startX = touch.clientX;
       startY = touch.clientY;
     };
@@ -108,13 +106,11 @@ export const useEdgeSwipeSessionSwitch = (
       const dy = touch.clientY - startY;
       if (Math.abs(dx) < MIN_DISTANCE) return;
       if (Math.abs(dy) > Math.abs(dx) * MAX_OFF_AXIS_RATIO) return;
-      // Must travel toward the centre: left edge → rightward, right edge → leftward.
-      if (fromLeftEdge && dx <= 0) return;
-      if (!fromLeftEdge && dx >= 0) return;
+      // Must travel toward the centre: right edge → leftward.
+      if (dx >= 0) return;
 
-      const step = fromLeftEdge ? -1 : 1;
-      if (switchByStep(step)) {
-        onSwitchRef.current?.(step < 0 ? 'prev' : 'next');
+      if (switchByStep(1)) {
+        onSwitchRef.current?.('next');
       }
     };
 

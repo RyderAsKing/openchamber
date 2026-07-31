@@ -124,7 +124,7 @@ open (except iPad sidebars, which animate width and keep content briefly).
 
 | Surface | File | Open via | Host |
 |---|---|---|---|
-| Sessions | `MobileSessionsSheet.tsx` | Header sessions button; deep link | `MobileSurfaceShell` (phone) or left sidebar (iPad) |
+| Sessions | `MobileSessionsSheet.tsx` | Header sessions button; deep link; left-edge swipe | `MobileSidebarShell` drawer (phone) or left sidebar (iPad) |
 | Files | `MobileFilesSurface.tsx` | Overflow / deep link / `openFiles` | Sheet or iPad right sidebar |
 | Changes | `MobileChangesSurface.tsx` | Overflow / PendingChangesBar / deep link | Sheet or iPad right sidebar |
 | Terminal | shared `TerminalView` | Overflow | `MobileSurfaceShell` |
@@ -159,6 +159,7 @@ changes → mcp → instances → settings → update.
 | `renderMobileApp.tsx` | React root + provider stack + native vs browser boot differences |
 | `mobileAppContext.tsx` | Actions bridge for shared components |
 | `MobileSurfaceShell.tsx` | Full-height bottom sheet: scrim, enter animation, drag-dismiss, deferred content mount |
+| `MobileSidebarShell.tsx` | Phone sessions drawer: left slide-in, scrim, swipe-left dismiss |
 | `MobileSessionsSheet.tsx` | Project → worktree → session tree, search, DnD, new project/worktree |
 | `MobileFilesSurface.tsx` | Directory browser + file preview (`browser` \| `file` routes) |
 | `MobileChangesSurface.tsx` | Git list + per-file diff, commit/sync; `initialDiffPath` deep entry |
@@ -168,7 +169,8 @@ changes → mcp → instances → settings → update.
 | `mobileQrScan.ts` | QR pairing payload + Capacitor barcode scan |
 | `mobileWidgetSnapshot.ts` | Bridge for iOS widget snapshots |
 | `useNativePushRegistration.ts` | Device push token registration when connected |
-| `useEdgeSwipeSessionSwitch.ts` | Edge swipe → prev/next session |
+| `useEdgeSwipeSessionSwitch.ts` | Right-edge swipe → next session |
+| `useSwipeOpenSessionsDrawer.ts` | Left-edge / open-zone swipe → sessions drawer |
 
 ### Supporting UI
 

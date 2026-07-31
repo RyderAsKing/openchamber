@@ -61,14 +61,16 @@ import { useAllLiveSessions } from '@/sync/sync-context';
 import type { WorktreeMetadata } from '@/types/worktree';
 
 import { MobileProjectEditSurface } from './MobileProjectEditSurface';
+import { MobileSidebarShell } from './MobileSidebarShell';
 import { MobileSurfaceShell } from './MobileSurfaceShell';
 
 type MobileSessionsSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 'sheet' (default) wraps the content in the swipe-dismiss MobileSurfaceShell;
+  /** 'drawer' (default on phone) slides in from the left with a scrim;
+      'sheet' uses the legacy bottom MobileSurfaceShell;
       'sidebar' renders the same content inline for the iPad persistent sidebar. */
-  variant?: 'sheet' | 'sidebar';
+  variant?: 'drawer' | 'sheet' | 'sidebar';
 };
 
 const EMPTY_PINNED_SESSION_IDS = new Set<string>();
@@ -522,7 +524,7 @@ const SortableProjectRow: React.FC<{
   );
 };
 
-export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, onOpenChange, variant = 'sheet' }) => {
+export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, onOpenChange, variant = 'drawer' }) => {
   const { t } = useI18n();
   const { git } = useRuntimeAPIs();
   const liveSessions = useAllLiveSessions();
@@ -577,7 +579,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
       setEditingOrder(false);
       setConfirmingDeleteId(null);
       setVisibleCountByBucket(new Map());
-      setEditingProjectId(null);
+      // Keep editingProjectId when the drawer closes to open MobileProjectEditSurface.
       setConfirmingArchiveSessionId(null);
       return;
     }
@@ -966,14 +968,27 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
 
   const hasNoMatches =
     normalizedQuery && searchSessionMatches.length === 0 && searchProjectMatches.length === 0;
-  const canEditOrder = !normalizedQuery && projectsMeta.length > 1;
+  const canManageProjects = !normalizedQuery && projectsMeta.length > 0;
+  const headerIconClass = 'size-9 shrink-0 text-muted-foreground';
 
-  const editToggle = canEditOrder ? (
+  const handleEditProject = React.useCallback((projectId: string) => {
+    setEditingProjectId(projectId);
+    if (variant === 'drawer') onOpenChange(false);
+  }, [onOpenChange, variant]);
+
+  const editToggle = canManageProjects ? (
     <Button
       type="button"
-      variant="chip"
-      size="sm"
-      aria-label={editingOrder ? t('mobile.sessions.doneEditing') : t('mobile.sessions.editOrder')}
+      variant="ghost"
+      size="icon"
+      className={cn(headerIconClass, editingOrder && 'text-primary')}
+      aria-label={
+        editingOrder
+          ? t('mobile.sessions.doneEditing')
+          : projectsMeta.length > 1
+            ? t('mobile.sessions.editOrder')
+            : t('chat.mobileStatus.editProjects.title')
+      }
       aria-pressed={editingOrder}
       onClick={() => setEditingOrder((value) => !value)}
       style={{ touchAction: 'manipulation' }}
@@ -986,25 +1001,30 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
     !editingOrder && projectsMeta.length > 0 ? (
       <Button
         type="button"
-        variant="default"
-        size="sm"
+        variant="ghost"
+        size="icon"
+        className={headerIconClass}
         aria-label={t('mobile.sessions.newChat')}
+        title={t('mobile.sessions.newChat')}
         onClick={handleStartNewChat}
         style={{ touchAction: 'manipulation' }}
       >
         <RiAddLine className="size-4" />
-        {t('mobile.sessions.newChat')}
       </Button>
     ) : null;
 
   const addProjectButton = !editingOrder ? (
     <Button
       type="button"
-      variant="chip"
-      size="sm"
+      variant="ghost"
+      size="icon"
+      className={headerIconClass}
       aria-label={t('sessions.sidebar.header.actions.addProject')}
       title={t('sessions.sidebar.header.actions.addProject')}
-      onClick={() => setDirectoryDialogOpen(true)}
+      onClick={() => {
+        if (variant === 'drawer') onOpenChange(false);
+        setDirectoryDialogOpen(true);
+      }}
       style={{ touchAction: 'manipulation' }}
     >
       <RiFolderAddLine className="size-4" />
@@ -1014,9 +1034,9 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const trailingActions =
     newChatButton || addProjectButton || editToggle ? (
       <>
+        {editToggle}
         {newChatButton}
         {addProjectButton}
-        {editToggle}
       </>
     ) : null;
 
@@ -1138,9 +1158,11 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
             </div>
           ) : editingOrder ? (
             <div className="flex flex-col gap-2 px-3 py-2">
-              <p className="px-1 typography-micro text-muted-foreground">
-                {t('mobile.sessions.editOrderHint')}
-              </p>
+              {projectsMeta.length > 1 ? (
+                <p className="px-1 typography-micro text-muted-foreground">
+                  {t('mobile.sessions.editOrderHint')}
+                </p>
+              ) : null}
               <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleReorderDragEnd}>
                 <SortableContext
                   items={projectsMeta.map((p) => p.id)}
@@ -1155,7 +1177,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
                           project={project}
                           totalSessions={node?.totalSessions ?? 0}
                           confirmingDelete={confirmingDeleteId === project.id}
-                          onEdit={() => setEditingProjectId(project.id)}
+                          onEdit={() => handleEditProject(project.id)}
                           onRequestRemove={() => handleRequestRemoveProject(project.id)}
                           onConfirmRemove={() => handleConfirmRemoveProject(project)}
                         />
@@ -1282,48 +1304,76 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
             </div>
           )}
         </ScrollShadow>
-
-        <DirectoryExplorerDialog open={directoryDialogOpen} onOpenChange={setDirectoryDialogOpen} />
-        <NewWorktreeDialog
-          open={newWorktreeDialogOpen}
-          onOpenChange={(value) => {
-            setNewWorktreeDialogOpen(value);
-            if (!value) setWorktreeDialogProjectId(null);
-          }}
-          onWorktreeCreated={(worktreePath, options) => {
-            if (options?.sessionId) void setCurrentSession(options.sessionId, worktreePath);
-            else
-              openNewSessionDraft({
-                selectedProjectId: worktreeDialogProjectId,
-                directoryOverride: worktreePath,
-                preserveDirectoryOverride: true,
-              });
-            onOpenChange(false);
-          }}
-        />
-        <MobileProjectEditSurface
-          open={editingProjectId !== null}
-          project={projectsMeta.find((entry) => entry.id === editingProjectId) ?? null}
-          onClose={() => setEditingProjectId(null)}
-          onWorktreesChanged={() => setWorktreeRefreshKey((value) => value + 1)}
-        />
       </div>
   );
 
+  const sessionOverlays = (
+    <>
+      <DirectoryExplorerDialog open={directoryDialogOpen} onOpenChange={setDirectoryDialogOpen} />
+      <NewWorktreeDialog
+        open={newWorktreeDialogOpen}
+        onOpenChange={(value) => {
+          setNewWorktreeDialogOpen(value);
+          if (!value) setWorktreeDialogProjectId(null);
+        }}
+        onWorktreeCreated={(worktreePath, options) => {
+          if (options?.sessionId) void setCurrentSession(options.sessionId, worktreePath);
+          else
+            openNewSessionDraft({
+              selectedProjectId: worktreeDialogProjectId,
+              directoryOverride: worktreePath,
+              preserveDirectoryOverride: true,
+            });
+          onOpenChange(false);
+        }}
+      />
+      <MobileProjectEditSurface
+        open={editingProjectId !== null}
+        project={projectsMeta.find((entry) => entry.id === editingProjectId) ?? null}
+        onClose={() => setEditingProjectId(null)}
+        onWorktreesChanged={() => setWorktreeRefreshKey((value) => value + 1)}
+      />
+    </>
+  );
+
+  const surfaceContentWithOverlays = (
+    <>
+      {surfaceContent}
+      {sessionOverlays}
+    </>
+  );
+
   if (variant === 'sidebar') {
-    if (!open) return null;
+    if (!open) return sessionOverlays;
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex h-[var(--oc-header-height,56px)] shrink-0 items-center justify-between gap-2 border-b border-border/30 px-4">
+        <div className="flex h-[var(--oc-header-height,56px)] shrink-0 items-center justify-between gap-1.5 border-b border-border/30 px-4">
           <h2 className="truncate typography-ui-label font-semibold text-foreground">
             {t('mobile.sessions.sheet.title')}
           </h2>
           {trailingActions ? (
-            <div className="flex shrink-0 items-center gap-2">{trailingActions}</div>
+            <div className="flex shrink-0 items-center gap-1">{trailingActions}</div>
           ) : null}
         </div>
-        {surfaceContent}
+        {surfaceContentWithOverlays}
       </div>
+    );
+  }
+
+  if (variant === 'drawer') {
+    return (
+      <>
+        <MobileSidebarShell
+          open={open}
+          onClose={() => onOpenChange(false)}
+          ariaLabel={t('mobile.sessions.sheet.title')}
+          title={t('mobile.sessions.sheet.title')}
+          trailing={trailingActions}
+        >
+          {surfaceContent}
+        </MobileSidebarShell>
+        {sessionOverlays}
+      </>
     );
   }
 
@@ -1335,7 +1385,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
       title={t('mobile.sessions.sheet.title')}
       trailing={trailingActions}
     >
-      {surfaceContent}
+      {surfaceContentWithOverlays}
     </MobileSurfaceShell>
   );
 };

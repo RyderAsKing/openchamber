@@ -70,6 +70,7 @@ import { useAppFontEffects } from './useAppFontEffects';
 import { useFontsReady } from './useFontsReady';
 import { useDeepLinkHandlers, useDeepLinkSource } from './deepLinkNavigation';
 import { useEdgeSwipeSessionSwitch } from './useEdgeSwipeSessionSwitch';
+import { useSwipeOpenSessionsDrawer } from './useSwipeOpenSessionsDrawer';
 import { useNativePushRegistration } from './useNativePushRegistration';
 
 const MOBILE_SETTINGS_PAGES = [
@@ -2205,9 +2206,10 @@ const MobileShell: React.FC<{ onActiveConnectionDeleted: () => void }> = ({ onAc
   );
   useDeepLinkHandlers(deepLinkHandlers);
 
-  // Edge swipe (left/right screen edge → centre) switches between sessions, with a directional
-  // slide+fade on the chat content so it's obvious the session changed.
+  // Right-edge swipe switches to the next session, with a directional slide+fade on the chat
+  // content so it's obvious the session changed. Left-edge swipe opens the sessions drawer.
   const chatMainRef = React.useRef<HTMLElement>(null);
+  const shellColumnRef = React.useRef<HTMLDivElement>(null);
   const chatAnimRef = React.useRef<HTMLDivElement>(null);
   const swipeDirectionRef = React.useRef<'prev' | 'next' | null>(null);
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
@@ -2218,6 +2220,10 @@ const MobileShell: React.FC<{ onActiveConnectionDeleted: () => void }> = ({ onAc
     swipeDirectionRef.current = direction;
   }, []);
   useEdgeSwipeSessionSwitch(chatMainRef, { onSwitch: recordSwipeDirection });
+  useSwipeOpenSessionsDrawer(shellColumnRef, {
+    enabled: !isIPad && !sessionsSheetOpen,
+    onOpen: () => setSessionsSheetOpen(true),
+  });
 
   React.useLayoutEffect(() => {
     const direction = swipeDirectionRef.current;
@@ -2447,9 +2453,9 @@ const MobileShell: React.FC<{ onActiveConnectionDeleted: () => void }> = ({ onAc
           </aside>
         ) : null}
 
-        <div className="flex h-full min-w-0 flex-1 flex-col" data-page-scroll-lock="true">
+        <div ref={shellColumnRef} className="flex h-full min-w-0 flex-1 flex-col" data-page-scroll-lock="true">
           <MobileHeader
-            onOpenSessions={() => (isIPad ? toggleIpadSidebar() : setSessionsSheetOpen(true))}
+            onOpenSessions={() => (isIPad ? toggleIpadSidebar() : setSessionsSheetOpen((open) => !open))}
             onOpenMenu={() => setOverflowOpen(true)}
             surfaceShortcuts={isIPad ? {
               activePanel: ipadRightPanel,
@@ -2531,9 +2537,7 @@ const MobileShell: React.FC<{ onActiveConnectionDeleted: () => void }> = ({ onAc
           rightOffset={isIPad && ipadRightPanel ? rightResize.width : 0}
         />
 
-        {sessionsSheetOpen ? (
-          <MobileSessionsSheet open={sessionsSheetOpen} onOpenChange={setSessionsSheetOpen} />
-        ) : null}
+        <MobileSessionsSheet open={sessionsSheetOpen} onOpenChange={setSessionsSheetOpen} />
 
         {/* Mounted only while open (like the sessions sheet) so each surface
             computes its safe-area / fixed-position layout fresh on open. Keeping
@@ -2589,7 +2593,6 @@ const MobileShell: React.FC<{ onActiveConnectionDeleted: () => void }> = ({ onAc
             open
             onClose={() => setMcpOpen(false)}
             title={t('mcpDropdown.title')}
-            className="h-[72vh]"
             contentMaxHeightClassName="max-h-full"
             renderHeader={(closeButton) => (
               <div className="shrink-0">
