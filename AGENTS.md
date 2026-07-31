@@ -67,7 +67,8 @@ High-value anchors:
 - CLI: `packages/web/bin/lib/DOCUMENTATION.md`
 - VS Code runtime: `packages/vscode/src/DOCUMENTATION.md`
 - Electron: `packages/electron/README.md`
-- Mobile: `packages/mobile/README.md`
+- Mobile native shell: `packages/mobile/README.md`
+- Mobile UI (chrome, sheets, surfaces): `packages/ui/src/apps/DOCUMENTATION.md`
 
 ## Project Skills
 

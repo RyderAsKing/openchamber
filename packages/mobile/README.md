@@ -4,6 +4,11 @@ Capacitor shell for the dedicated OpenChamber mobile web surface.
 
 The mobile package reuses the web build, then rewrites `mobile.html` to `index.html` in `packages/mobile/dist` so native iOS/Android always launch `MobileApp` instead of the hosted surface selector.
 
+For how the mobile **UI** is constructed (header, sheets, surfaces, composer,
+Capacitor vs hosted differences, and where to change UX), see
+[`packages/ui/src/apps/DOCUMENTATION.md`](../ui/src/apps/DOCUMENTATION.md).
+This README covers the native shell, build commands, and connection model.
+
 ## Runtime Model
 
 - The native app bundles the mobile UI only; it does not embed the OpenChamber web server or OpenCode server.
